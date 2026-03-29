@@ -1,28 +1,24 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { UserProvider } from "@/context/UserContext";
+import Wrapper from "./wrapper";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Configure the font
+const inter = Inter({
   subsets: ["latin"],
+  display: 'swap',
 });
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = {
-  title: "Kokoro.ai - Your Ai Companion",
-  description: "",
-};
 
 export default function RootLayout({ children }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={inter.className}>
+      <body>
+        <UserProvider>
+          <Wrapper>
+            {children}
+          </Wrapper>
+        </UserProvider>
+      </body>
     </html>
   );
 }

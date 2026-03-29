@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
-
 export async function GET(request) {
-          return NextResponse.redirect('http://localhost:3000')
+          const url = new URL(request.url)
+          const nextUrl = new URL('/', url.origin)
+          nextUrl.search = url.search
+          return Response.redirect(nextUrl)
 }

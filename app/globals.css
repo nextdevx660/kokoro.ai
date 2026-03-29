@@ -121,10 +121,18 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }
+}
+
+
+/* CSS file me ya style tag me */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
