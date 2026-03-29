@@ -1,8 +1,14 @@
 import Image from 'next/image';
 import React from 'react';
 import { MessageSquare } from 'lucide-react'; // Optional: Use lucide-react for the icon
+import { useRouter } from 'next/navigation';
 
 export default function ForYou({ forYou }) {
+          const router = useRouter()
+
+          const handleClick = (id) => {
+                    router.push('/chat/'+id)
+          }
           return (
                     <div className="">
                               <h2 className="text-lg font-semibold text-black pb-2 px-2">For you</h2>
@@ -13,6 +19,7 @@ export default function ForYou({ forYou }) {
                                                   <div
                                                             key={i}
                                                             className="flex min-w-[320px] max-w-[350px] bg-[#f3f4f6] rounded-2xl p-3 hover:bg-gray-200 transition-colors cursor-pointer"
+                                                            onClick={() => {handleClick(item?.id)}}
                                                   >
                                                             {/* Image Section */}
                                                             <div className="relative w-24 h-24 flex-shrink-0">
