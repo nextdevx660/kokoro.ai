@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthProvider";
 import { supabase } from "@/lib/supabase";
+import { useUser } from "@/context/UserContext";
 
 const initialForm = {
   name: "",
@@ -19,7 +20,8 @@ const initialForm = {
 
 export default function CreateCharacterPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  // const { user, loading } = useAuth();
+  const {userData, user, loading} = useUser()
   const [form, setForm] = useState(initialForm);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
