@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthProvider";
 import { useUser } from "@/context/UserContext";
 import ReactMarkdown from "react-markdown";
-import { supabase } from "@/lib/supabase";
+import { getFirebaseAccessToken } from "@/lib/auth-client";
 import { FREE_DAILY_TOKENS } from "@/lib/token-system";
 import {
   getStoredChat,
@@ -120,12 +120,10 @@ export default function ChatPage() {
         setLoadingCharacter(true);
         setError("");
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const headers = session?.access_token
+        const accessToken = await getFirebaseAccessToken();
+        const headers = accessToken
           ? {
-              Authorization: `Bearer ${session.access_token}`,
+              Authorization: `Bearer ${accessToken}`,
             }
           : undefined;
         const response = await axios.get(`/api/characters/${id}`, { headers });
@@ -173,7 +171,7 @@ export default function ChatPage() {
 
         if (user) {
           const storedChat = await getStoredChat({
-            userId: user.id,
+            userId: user.uid,
             characterId: character.id,
           });
 
@@ -243,17 +241,15 @@ export default function ChatPage() {
 
       try {
         setLoadingTokens(true);
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const accessToken = await getFirebaseAccessToken();
 
-        if (!session?.access_token) {
+        if (!accessToken) {
           throw new Error("Please sign in to use your daily chat tokens.");
         }
 
         const response = await axios.get("/api/chat", {
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${accessToken}`,
           },
         });
 
@@ -307,12 +303,12 @@ export default function ChatPage() {
 
     const savedChatId = await saveChatSession({
       chatId: existingChatId,
-      userId: user.id,
+      userId: user.uid,
       character,
       messages: nextMessages,
     });
 
-    await saveActiveChatId(user.id, savedChatId);
+    await saveActiveChatId(user.uid, savedChatId);
     setChatId(savedChatId);
     setUserData((current) =>
       current ? { ...current, chat_id: savedChatId } : current
@@ -348,11 +344,9 @@ export default function ChatPage() {
     setError("");
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const accessToken = await getFirebaseAccessToken();
 
-      if (!session?.access_token) {
+      if (!accessToken) {
         throw new Error("Please sign in again to continue chatting.");
       }
 
@@ -361,7 +355,7 @@ export default function ChatPage() {
         messages: nextMessages,
       }, {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 

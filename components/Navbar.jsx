@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useUser } from '@/context/UserContext'
 import { Coins } from 'lucide-react'
 import axios from 'axios'
-import { supabase } from '@/lib/supabase'
+import { getFirebaseAccessToken } from '@/lib/auth-client'
 import { FREE_DAILY_TOKENS } from '@/lib/token-system'
 import Image from 'next/image'
 
@@ -37,15 +37,15 @@ export default function Navbar() {
       }
 
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const accessToken = await getFirebaseAccessToken()
 
-        if (!session?.access_token) {
+        if (!accessToken) {
           return
         }
 
         const response = await axios.get('/api/chat', {
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${accessToken}`,
           },
         })
 

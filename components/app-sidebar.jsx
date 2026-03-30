@@ -33,11 +33,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/supabase"
+import { db } from "@/lib/firebase"
+import { signOutUser } from "@/lib/auth-client"
 import { useEffect, useState, useRef } from "react"
 import { useAuth } from "@/context/AuthProvider"
 import { useUser } from "@/context/UserContext"
 import { usePathname, useRouter } from "next/navigation"
+import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore"
 
 export function AppSidebar() {
           // const { user, setUser } = useAuth()
@@ -70,16 +72,17 @@ export function AppSidebar() {
                               try {
                                         setHistoryLoading(true)
 
-                                        const { data, error } = await supabase
-                                                  .from("chats")
-                                                  .select("id, character_id, character_name, character_avatar_url, updated_at, messages")
-                                                  .eq("user_id", user.id)
-                                                  .order("updated_at", { ascending: false })
-                                                  .limit(12)
-
-                                        if (error) {
-                                                  throw error
-                                        }
+                                        const chatsQuery = query(
+                                                  collection(db, "chats"),
+                                                  where("user_id", "==", user.uid),
+                                                  orderBy("updated_at", "desc"),
+                                                  limit(12)
+                                        )
+                                        const snapshot = await getDocs(chatsQuery)
+                                        const data = snapshot.docs.map((chatDoc) => ({
+                                                  id: chatDoc.id,
+                                                  ...chatDoc.data(),
+                                        }))
 
                                         if (active) {
                                                   setChatHistory(data || [])
@@ -178,8 +181,7 @@ export function AppSidebar() {
           }, [])
 
           const handleLogout = async () => {
-                    await supabase.auth.signOut()
-                    setUser(null)
+                    await signOutUser()
                     setUserData(null)
                     window.location.href = "/" // Ya jo bhi aapka login route ho
           }

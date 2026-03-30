@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getFirebaseAccessToken } from "@/lib/auth-client";
 import { useUser } from "@/context/UserContext";
 
 function loadPayPalScript({ clientId, currency }) {
@@ -49,7 +49,7 @@ export default function PayPalUpgradeButton({
   const [isError, setIsError] = useState(false);
   const containerRef = useRef(null);
 
-  async function syncSupabasePlan(accessToken) {
+  async function syncFirebasePlan(accessToken) {
     const response = await fetch("/api/billing/sync-plan", {
       method: "POST",
       headers: {
@@ -130,18 +130,16 @@ export default function PayPalUpgradeButton({
               setMessage("");
               setIsError(false);
 
-              const {
-                data: { session },
-              } = await supabase.auth.getSession();
+              const accessToken = await getFirebaseAccessToken();
 
-              if (!session?.access_token) {
+              if (!accessToken) {
                 throw new Error("Please sign in before upgrading.");
               }
 
               const response = await fetch("/api/paypal/create-order", {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${session.access_token}`,
+                  Authorization: `Bearer ${accessToken}`,
                 },
               });
               const payload = await response.json();
@@ -153,18 +151,16 @@ export default function PayPalUpgradeButton({
               return payload.id;
             },
             async onApprove(data) {
-              const {
-                data: { session },
-              } = await supabase.auth.getSession();
+              const accessToken = await getFirebaseAccessToken();
 
-              if (!session?.access_token) {
+              if (!accessToken) {
                 throw new Error("Please sign in again before capturing payment.");
               }
 
               const response = await fetch("/api/paypal/capture-order", {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${session.access_token}`,
+                  Authorization: `Bearer ${accessToken}`,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
@@ -177,7 +173,7 @@ export default function PayPalUpgradeButton({
                 throw new Error(payload.error || "Payment capture failed.");
               }
 
-              const syncedProfile = await syncSupabasePlan(session.access_token).catch(
+              const syncedProfile = await syncFirebasePlan(accessToken).catch(
                 () => payload.profile
               );
 

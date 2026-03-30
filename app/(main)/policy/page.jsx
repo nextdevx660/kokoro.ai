@@ -140,7 +140,7 @@ export default function PolicyPage() {
               {/* Footer Note */}
               <div className="mt-16 rounded-3xl bg-slate-900 p-8 text-center text-white">
                 <h3 className="text-xl font-semibold">Questions about our policies?</h3>
-                <p className="mt-2 text-slate-400">We're here to help you understand your rights and responsibilities.</p>
+                <p className="mt-2 text-slate-400">We&apos;re here to help you understand your rights and responsibilities.</p>
                 <button className="mt-6 rounded-full bg-white px-8 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-200">
                   Contact Support Team
                 </button>

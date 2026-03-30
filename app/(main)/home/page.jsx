@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import CharacterCard from '@/components/CharacterCard';
 import { useAuth } from '@/context/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { getFirebaseAccessToken } from '@/lib/auth-client';
 import ForYou from '@/components/ForYou';
 import Demoness from '@/components/Demoness';
 import Kitsune from '@/components/Kitsune';
@@ -16,7 +16,7 @@ import Scenes from '@/components/Scenes';
 import { collection, doc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-export default function page() {
+export default function HomePage() {
   const { userData, user } = useUser()
   const [allCharacters, setAllCharacters] = useState([]);
   const [forYou, setForYou] = useState([])
@@ -27,11 +27,9 @@ export default function page() {
 
   const getAllCharacters = async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const headers = session?.access_token
-        ? { Authorization: `Bearer ${session.access_token}` }
+      const accessToken = await getFirebaseAccessToken();
+      const headers = accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
         : undefined;
       const resp = await axios.get('/api/characters', { headers });
       setAllCharacters(resp.data);

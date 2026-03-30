@@ -1,132 +1,24 @@
 import "server-only";
 
 import { saveBillingProfile } from "@/lib/billing-storage";
+import { serverDb } from "@/lib/firebase-admin";
+import { requireFirebaseUser } from "@/lib/firebase-server-auth";
 import { capturePayPalOrder } from "@/lib/paypal";
 import {
-  createAdminSupabaseClient,
-  createServerSupabaseClient,
-} from "@/lib/supabase-server";
-
-function getAccessToken(request) {
-  const authorization = request.headers.get("authorization") || "";
-
-  if (!authorization.startsWith("Bearer ")) {
-    return "";
-  }
-
-  return authorization.slice(7).trim();
-}
-
-async function requireUser(request) {
-  const accessToken = getAccessToken(request);
-
-  if (!accessToken) {
-    return {
-      error: Response.json({ error: "Please sign in first." }, { status: 401 }),
-    };
-  }
-
-  const supabase = createServerSupabaseClient(accessToken);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return {
-      error: Response.json(
-        { error: "Your session is invalid. Please sign in again." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  return { supabase, user };
-}
-
-async function ensureUserRow(supabase, user) {
-  const { data: existingProfile, error: existingError } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (existingError) {
-    throw existingError;
-  }
-
-  if (existingProfile) {
-    return existingProfile;
-  }
-
-  const fallbackName =
-    user.user_metadata?.name ||
-    user.user_metadata?.full_name ||
-    user.email ||
-    "User";
-
-  const { data, error } = await supabase
-    .from("users")
-    .insert({
-      id: user.id,
-      email: user.email,
-      name: fallbackName,
-      plan: "free",
-    })
-    .select("*")
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-async function activateProPlan({ writeSupabase, userSupabase, userId }) {
-  if (writeSupabase !== userSupabase) {
-    const { data, error } = await writeSupabase
-      .from("users")
-      .update({
-        plan: "pro",
-      })
-      .eq("id", userId)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw new Error(
-        `Failed to activate Pro plan for user ${userId}: ${error.message}`
-      );
-    }
-
-    return data;
-  }
-
-  const { data, error } = await userSupabase.rpc("activate_pro_plan", {
-    target_user_id: userId,
-  });
-
-  if (error) {
-    throw new Error(
-      `Failed to activate Pro plan for user ${userId}: ${error.message}`
-    );
-  }
-
-  return data;
-}
+  ensureUserProfile,
+  updateUserProfile,
+} from "@/lib/user-storage-server";
 
 export async function POST(request) {
   try {
-    const authResult = await requireUser(request);
+    const authResult = await requireFirebaseUser(request);
 
     if (authResult.error) {
       return authResult.error;
     }
 
-    const { supabase: userSupabase, user } = authResult;
-    const writeSupabase =
-      createAdminSupabaseClient() || userSupabase;
-    await ensureUserRow(writeSupabase, user);
+    const { user } = authResult;
+    await ensureUserProfile(user);
     const body = await request.json().catch(() => null);
     const orderId = String(body?.orderId || "").trim();
 
@@ -155,29 +47,22 @@ export async function POST(request) {
       capture.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.currency_code ||
       "USD";
 
-    const { error: paymentError } = await writeSupabase
-      .from("paypal_orders")
-      .upsert(
-        {
-          user_id: user.id,
-          paypal_order_id: orderId,
-          plan: "pro",
-          status: "COMPLETED",
-          paypal_capture_id: captureId,
-          payer_email: payerEmail,
-          captured_at: new Date().toISOString(),
-          amount,
-          currency,
-          raw_response: capture,
-        },
-        {
-          onConflict: "paypal_order_id",
-        }
-      );
-
-    if (paymentError) {
-      throw paymentError;
-    }
+    await serverDb.collection("paypal_orders").doc(orderId).set(
+      {
+        id: orderId,
+        user_id: user.id,
+        paypal_order_id: orderId,
+        plan: "pro",
+        status: "COMPLETED",
+        paypal_capture_id: captureId,
+        payer_email: payerEmail,
+        captured_at: new Date().toISOString(),
+        amount,
+        currency,
+        raw_response: capture,
+      },
+      { merge: true }
+    );
 
     await saveBillingProfile(user.id, {
       plan: "pro",
@@ -191,27 +76,9 @@ export async function POST(request) {
       activatedAt: new Date().toISOString(),
     });
 
-    let profile;
-
-    try {
-      profile = await activateProPlan({
-        writeSupabase,
-        userSupabase,
-        userId: user.id,
-      });
-    } catch (planActivationError) {
-      console.error("Supabase plan activation warning:", planActivationError);
-      profile = {
-        id: user.id,
-        email: user.email,
-        name:
-          user.user_metadata?.name ||
-          user.user_metadata?.full_name ||
-          user.email ||
-          "User",
-        plan: "pro",
-      };
-    }
+    const profile = await updateUserProfile(user.id, {
+      plan: "pro",
+    });
 
     return Response.json({
       success: true,
@@ -232,7 +99,7 @@ export async function POST(request) {
       {
         error:
           error.message ||
-          "Failed to capture PayPal payment. Check users table RLS and SUPABASE_SERVICE_ROLE_KEY.",
+          "Failed to capture PayPal payment.",
       },
       { status: 500 }
     );

@@ -11,7 +11,7 @@ import {
   UserCog,
 } from "lucide-react";
 import { useUser } from "@/context/UserContext";
-import { supabase } from "@/lib/supabase";
+import { getFirebaseAccessToken } from "@/lib/auth-client";
 
 const initialToggles = {
   emailAnnouncements: true,
@@ -54,8 +54,7 @@ export default function Page() {
     async function loadSettings() {
       try {
         setLoading(true);
-        const { data: sessionData } = await supabase.auth.getSession();
-        const accessToken = sessionData.session?.access_token;
+        const accessToken = await getFirebaseAccessToken();
 
         if (!accessToken) throw new Error("Session expired. Please sign in again.");
 
@@ -93,8 +92,7 @@ export default function Page() {
     setError("");
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
+      const accessToken = await getFirebaseAccessToken();
 
       if (!accessToken) throw new Error("Session expired.");
 

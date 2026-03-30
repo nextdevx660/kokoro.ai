@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Camera, Loader2, Mail, Save, User2 } from "lucide-react";
 import { useAuth } from "@/context/AuthProvider";
 import { useUser } from "@/context/UserContext";
-import { supabase } from "@/lib/supabase";
+import { getFirebaseAccessToken } from "@/lib/auth-client";
 
 export default function Page() {
           const router = useRouter();
@@ -53,8 +53,7 @@ export default function Page() {
                                         setPageLoading(true);
                                         setError("");
 
-                                        const { data: sessionData } = await supabase.auth.getSession();
-                                        const accessToken = sessionData.session?.access_token;
+                                        const accessToken = await getFirebaseAccessToken();
 
                                         if (!accessToken) throw new Error("Session expired. Please sign in again.");
 
@@ -98,8 +97,7 @@ export default function Page() {
                               setError("");
                               setSuccess("");
 
-                              const { data: sessionData } = await supabase.auth.getSession();
-                              const accessToken = sessionData.session?.access_token;
+                              const accessToken = await getFirebaseAccessToken();
 
                               if (!accessToken) throw new Error("Session expired. Please sign in again.");
 

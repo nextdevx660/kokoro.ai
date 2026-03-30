@@ -1,62 +1,11 @@
-import { mapCharacterRow } from "@/lib/characters";
+import { listPublicCharacters, mapCharacterRow } from "@/lib/characters";
 import { uploadImageToCloudinary } from "@/lib/cloudinary";
-import { db } from "@/lib/firebase";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
-
-function getAccessToken(request) {
-  const authorization = request.headers.get("authorization") || "";
-
-  if (!authorization.startsWith("Bearer ")) {
-    return "";
-  }
-
-  return authorization.slice(7).trim();
-}
-
-async function getOptionalUser(accessToken) {
-  const supabase = createServerSupabaseClient(accessToken);
-
-  if (!accessToken) {
-    return { supabase, user: null };
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { supabase, user: user || null };
-}
+import { serverDb } from "@/lib/firebase-admin";
+import { getOptionalFirebaseUser, requireFirebaseUser } from "@/lib/firebase-server-auth";
 
 export async function GET() {
   try {
-    const charactersQuery = query(
-      collection(db, "characters"),
-      orderBy("generatedAt", "desc"),
-      limit(120)
-    );
-    const [firestoreSnapshot, supabaseResult] = await Promise.all([
-      getDocs(charactersQuery),
-      createServerSupabaseClient()
-        .from("characters")
-        .select("*")
-        .eq("visibility", "public")
-        .order("created_at", { ascending: false })
-        .limit(120),
-    ]);
-
-    if (supabaseResult.error) {
-      throw supabaseResult.error;
-    }
-
-    const firestoreCharacters = firestoreSnapshot.docs
-      .map((characterDoc) => ({
-        id: characterDoc.id,
-        ...characterDoc.data(),
-      }))
-      .filter((character) => !character.isScene);
-    const publicSupabaseCharacters = (supabaseResult.data || []).map(mapCharacterRow);
-    const characters = [...firestoreCharacters, ...publicSupabaseCharacters].sort(
+    const characters = (await listPublicCharacters()).sort(
       (left, right) => {
         const leftTime = new Date(
           left.createdAt || left.updatedAt || left.generatedAt || 0
@@ -82,23 +31,16 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const accessToken = getAccessToken(request);
+    const authResult = await requireFirebaseUser(
+      request,
+      "Please sign in to create a character."
+    );
 
-    if (!accessToken) {
-      return Response.json(
-        { error: "Please sign in to create a character." },
-        { status: 401 }
-      );
+    if (authResult.error) {
+      return authResult.error;
     }
 
-    const { supabase, user } = await getOptionalUser(accessToken);
-
-    if (!user) {
-      return Response.json(
-        { error: "Your session is invalid. Please sign in again." },
-        { status: 401 }
-      );
-    }
+    const { user } = authResult;
 
     const formData = await request.formData();
     const name = String(formData.get("name") || "").trim();
@@ -127,23 +69,24 @@ export async function POST(request) {
       folder: "characters",
     });
 
-    const { data, error } = await supabase
-      .from("characters")
-      .insert({
-        user_id: user.id,
-        visibility,
-        name,
-        description,
-        tag,
-        prompt,
-        avatar_url: upload.url,
-      })
-      .select("*")
-      .single();
+    const characterRef = serverDb.collection("characters").doc();
+    const data = {
+      id: characterRef.id,
+      userId: user.id,
+      visibility,
+      name,
+      description,
+      tag,
+      prompt,
+      avatarUrl: upload.url,
+      isFree: true,
+      isScene: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      generatedAt: Date.now(),
+    };
 
-    if (error) {
-      throw error;
-    }
+    await characterRef.set(data);
 
     return Response.json(mapCharacterRow(data), { status: 201 });
   } catch (error) {

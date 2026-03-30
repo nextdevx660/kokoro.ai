@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
-import { db } from "@/lib/firebase";
+import { serverDb } from "@/lib/firebase-admin";
+import { requireFirebaseUser } from "@/lib/firebase-server-auth";
 import { uploadImageToCloudinary } from "@/lib/cloudinary";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { doc, setDoc } from "firebase/firestore";
 
 function buildSceneRecord({
   userId,
@@ -56,30 +55,16 @@ function buildSceneRecord({
 
 export async function POST(request) {
   try {
-    const authorization = request.headers.get("authorization") || "";
-    const accessToken = authorization.startsWith("Bearer ")
-      ? authorization.slice(7).trim()
-      : "";
+    const authResult = await requireFirebaseUser(
+      request,
+      "Please sign in to create a world."
+    );
 
-    if (!accessToken) {
-      return Response.json(
-        { error: "Please sign in to create a world." },
-        { status: 401 }
-      );
+    if (authResult.error) {
+      return authResult.error;
     }
 
-    const supabase = createServerSupabaseClient(accessToken);
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return Response.json(
-        { error: "Your session is invalid. Please sign in again." },
-        { status: 401 }
-      );
-    }
+    const { user } = authResult;
 
     const formData = await request.formData();
     const playerName = String(formData.get("playerName") || "").trim();
@@ -132,7 +117,7 @@ export async function POST(request) {
       avatarUrl: upload.url,
     });
 
-    await setDoc(doc(db, "characters", scene.id), scene);
+    await serverDb.collection("characters").doc(scene.id).set(scene);
 
     return Response.json(scene, { status: 201 });
   } catch (error) {

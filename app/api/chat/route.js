@@ -1,104 +1,28 @@
 import { createCharacterReply } from "@/lib/chat";
 import { getVisibleCharacterById } from "@/lib/characters";
-import { db } from "@/lib/firebase";
-import {
-  createAdminSupabaseClient,
-  createServerSupabaseClient,
-} from "@/lib/supabase-server";
+import { requireFirebaseUser } from "@/lib/firebase-server-auth";
 import {
   consumeDailyChatToken,
   getDailyChatTokenStatus,
 } from "@/lib/token-storage";
-import { doc, getDoc } from "firebase/firestore";
-
-async function requireAuthenticatedUser(request) {
-  const authorization = request.headers.get("authorization") || "";
-  const accessToken = authorization.startsWith("Bearer ")
-    ? authorization.slice(7).trim()
-    : "";
-
-  if (!accessToken) {
-    return {
-      error: Response.json(
-        { error: "Please sign in to continue chatting." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  const supabase = createServerSupabaseClient(accessToken);
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return {
-      error: Response.json(
-        { error: "Your session is invalid. Please sign in again." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  return { supabase, user };
-}
-
-async function getCharacter({ supabase, userId, characterId }) {
-  const firestoreSnapshot = await getDoc(doc(db, "characters", characterId));
-
-  if (firestoreSnapshot.exists()) {
-    const firestoreCharacter = {
-      id: firestoreSnapshot.id,
-      ...firestoreSnapshot.data(),
-    };
-
-    if (
-      firestoreCharacter.visibility === "private" &&
-      firestoreCharacter.userId &&
-      firestoreCharacter.userId !== userId
-    ) {
-      return null;
-    }
-
-    return firestoreCharacter;
-  }
-
-  return getVisibleCharacterById({
-    supabase,
-    userId,
-    id: characterId,
-  });
-}
 
 function formatTokenError(error) {
-  const message = error?.message || "";
-
-  if (
-    message.includes("daily_tokens_remaining") ||
-    message.includes("token_last_reset_at") ||
-    message.includes("User profile not found")
-  ) {
-    return "Token system database columns are missing. Run the SQL in supabase/chat_system.sql first.";
-  }
-
-  return message || "Failed to load token status.";
+  return error?.message || "Failed to load token status.";
 }
 
 export async function GET(request) {
   try {
-    const authResult = await requireAuthenticatedUser(request);
+    const authResult = await requireFirebaseUser(
+      request,
+      "Please sign in to continue chatting."
+    );
 
     if (authResult.error) {
       return authResult.error;
     }
 
-    const { supabase, user } = authResult;
-    const tokenState = await getDailyChatTokenStatus({
-      adminSupabase: createAdminSupabaseClient(),
-      supabase,
-      userId: user.id,
-    });
+    const { user } = authResult;
+    const tokenState = await getDailyChatTokenStatus({ userId: user.id });
 
     return Response.json(tokenState);
   } catch (error) {
@@ -113,13 +37,16 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const authResult = await requireAuthenticatedUser(request);
+    const authResult = await requireFirebaseUser(
+      request,
+      "Please sign in to continue chatting."
+    );
 
     if (authResult.error) {
       return authResult.error;
     }
 
-    const { supabase, user } = authResult;
+    const { user } = authResult;
     const body = await request.json();
     const characterId = body?.characterId;
     const messages = Array.isArray(body?.messages) ? body.messages : [];
@@ -132,7 +59,6 @@ export async function POST(request) {
     }
 
     const character = await getCharacter({
-      supabase,
       userId: user.id,
       characterId,
     });
@@ -144,11 +70,7 @@ export async function POST(request) {
       );
     }
 
-    const tokenState = await consumeDailyChatToken({
-      adminSupabase: createAdminSupabaseClient(),
-      supabase,
-      userId: user.id,
-    });
+    const tokenState = await consumeDailyChatToken({ userId: user.id });
 
     if (tokenState.isBlocked) {
       return Response.json(
@@ -187,4 +109,11 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+}
+
+async function getCharacter({ userId, characterId }) {
+  return getVisibleCharacterById({
+    userId,
+    id: characterId,
+  });
 }

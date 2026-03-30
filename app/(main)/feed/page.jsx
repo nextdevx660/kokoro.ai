@@ -20,7 +20,7 @@ async function getFeedEntries() {
   const feedQuery = query(
     collection(db, "characters"),
     orderBy("generatedAt", "desc"),
-    limit(100)
+    limit(1000)
   );
   const snapshot = await getDocs(feedQuery);
   return snapshot.docs.map(normalizeEntry).filter((entry) => entry.image);

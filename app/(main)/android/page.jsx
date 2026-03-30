@@ -49,7 +49,7 @@ export default function ComingSoonPage() {
                                         <div className="flex justify-center">
                                                   <Badge variant="outline" className="px-4 py-1.5 rounded-full bg-white/50 backdrop-blur-md border-purple-100 text-purple-700 shadow-sm flex gap-2 items-center">
                                                             <Sparkles className="w-3.5 h-3.5" />
-                                                            <span className="font-semibold">Founder’s Access: 142/500 spots left</span>
+                                                            <span className="font-semibold">Founder&apos;s Access: 142/500 spots left</span>
                                                   </Badge>
                                         </div>
 
@@ -96,7 +96,7 @@ export default function ComingSoonPage() {
                                                             <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
                                                                       <CheckCircle2 className="text-green-600 w-8 h-8" />
                                                             </div>
-                                                            <h3 className="text-2xl font-bold text-slate-900">You're on the list!</h3>
+                                                            <h3 className="text-2xl font-bold text-slate-900">You&apos;re on the list!</h3>
                                                             <p className="text-slate-500">Check your inbox soon for your Pro Access invite.</p>
                                                   </div>
                                         )}

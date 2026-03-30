@@ -7,7 +7,7 @@ import { Loader2, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthProvider";
-import { supabase } from "@/lib/supabase";
+import { getFirebaseAccessToken } from "@/lib/auth-client";
 import { useUser } from "@/context/UserContext";
 
 const initialForm = {
@@ -75,11 +75,9 @@ export default function CreateCharacterPage() {
       setSubmitting(true);
       setError("");
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const accessToken = await getFirebaseAccessToken();
 
-      if (!session?.access_token) {
+      if (!accessToken) {
         throw new Error("Your session expired. Please sign in again.");
       }
 
@@ -94,7 +92,7 @@ export default function CreateCharacterPage() {
       const response = await fetch("/api/characters", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: payload,
       });
@@ -130,7 +128,7 @@ export default function CreateCharacterPage() {
               Create your legend.
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-slate-500">
-              Configure your character's persona, visual identity, and access rules.
+              Configure your character&apos;s persona, visual identity, and access rules.
               Your profile will be stored securely in the Cloud.
             </p>
           </div>

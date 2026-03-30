@@ -1,46 +1,8 @@
 import "server-only";
 
 import { createPayPalOrder, getPayPalPublicConfig } from "@/lib/paypal";
-import {
-  createAdminSupabaseClient,
-  createServerSupabaseClient,
-} from "@/lib/supabase-server";
-
-function getAccessToken(request) {
-  const authorization = request.headers.get("authorization") || "";
-
-  if (!authorization.startsWith("Bearer ")) {
-    return "";
-  }
-
-  return authorization.slice(7).trim();
-}
-
-async function requireUser(request) {
-  const accessToken = getAccessToken(request);
-
-  if (!accessToken) {
-    return {
-      error: Response.json({ error: "Please sign in first." }, { status: 401 }),
-    };
-  }
-
-  const supabase = createServerSupabaseClient(accessToken);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return {
-      error: Response.json(
-        { error: "Your session is invalid. Please sign in again." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  return { supabase, user };
-}
+import { serverDb } from "@/lib/firebase-admin";
+import { requireFirebaseUser } from "@/lib/firebase-server-auth";
 
 export async function GET() {
   try {
@@ -55,19 +17,18 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const authResult = await requireUser(request);
+    const authResult = await requireFirebaseUser(request);
 
     if (authResult.error) {
       return authResult.error;
     }
 
     const { user } = authResult;
-    const supabase =
-      createAdminSupabaseClient() || authResult.supabase;
     const order = await createPayPalOrder();
 
-    const { error: insertError } = await supabase.from("paypal_orders").upsert(
+    await serverDb.collection("paypal_orders").doc(order.id).set(
       {
+        id: order.id,
         user_id: user.id,
         paypal_order_id: order.id,
         status: order.status || "CREATED",
@@ -75,15 +36,8 @@ export async function POST(request) {
         amount: order.purchase_units?.[0]?.amount?.value || "9.99",
         currency: order.purchase_units?.[0]?.amount?.currency_code || "USD",
         raw_response: order,
-      },
-      {
-        onConflict: "paypal_order_id",
       }
     );
-
-    if (insertError) {
-      throw insertError;
-    }
 
     return Response.json({
       id: order.id,
@@ -96,7 +50,7 @@ export async function POST(request) {
       {
         error:
           error.message ||
-          "Failed to create PayPal order. Check paypal_orders RLS and server Supabase config.",
+          "Failed to create PayPal order.",
       },
       { status: 500 }
     );

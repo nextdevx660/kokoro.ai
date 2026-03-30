@@ -1,147 +1,131 @@
-"use client"
+"use client";
 
-import { createContext, useContext, useEffect, useState } from "react"
-import { getBillingProfile } from "@/lib/billing-storage"
-import { supabase } from "@/lib/supabase"
+import { createContext, useContext, useEffect, useState } from "react";
+import { auth } from "@/lib/firebase";
+import {
+  getFirebaseAccessToken,
+  subscribeToAuthChanges,
+} from "@/lib/auth-client";
+import { getBillingProfile } from "@/lib/billing-storage";
+import {
+  ensureUserProfile as ensureClientUserProfile,
+  getUserProfile,
+} from "@/lib/user-storage";
 
-// Create Context
-const UserContext = createContext()
+const UserContext = createContext();
 
-// Provider Component
 export const UserProvider = ({ children }) => {
-          const [user, setUser] = useState(null)
-          const [userData, setUserData] = useState(null)
-          const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-          const syncSupabasePlan = async () => {
-                    const { data: { session } } = await supabase.auth.getSession()
+  const syncFirebasePlan = async () => {
+    const accessToken = await getFirebaseAccessToken();
 
-                    if (!session?.access_token) {
-                              return null
-                    }
+    if (!accessToken) {
+      return null;
+    }
 
-                    const response = await fetch("/api/billing/sync-plan", {
-                              method: "POST",
-                              headers: {
-                                        Authorization: `Bearer ${session.access_token}`,
-                              },
-                    })
+    const response = await fetch("/api/billing/sync-plan", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
-                    const payload = await response.json().catch(() => null)
+    const payload = await response.json().catch(() => null);
 
-                    if (!response.ok) {
-                              throw new Error(payload?.error || "Failed to sync billing plan.")
-                    }
+    if (!response.ok) {
+      throw new Error(payload?.error || "Failed to sync billing plan.");
+    }
 
-                    return payload?.profile || null
+    return payload?.profile || null;
+  };
+
+  const mergeBillingPlan = async (profile) => {
+    if (!profile?.id) {
+      return profile;
+    }
+
+    try {
+      const billingProfile = await getBillingProfile(profile.id);
+
+      if (billingProfile?.plan === "pro" || billingProfile?.plan === "premium") {
+        if (profile.plan !== billingProfile.plan) {
+          try {
+            const syncedProfile = await syncFirebasePlan();
+
+            if (syncedProfile) {
+              return syncedProfile;
+            }
+          } catch (syncError) {
+            console.log("Billing sync error:", syncError);
           }
+        }
 
-          const mergeBillingPlan = async (profile) => {
-                    if (!profile?.id) {
-                              return profile
-                    }
+        return {
+          ...profile,
+          plan: billingProfile.plan,
+        };
+      }
+    } catch (billingError) {
+      console.log("Billing profile read error:", billingError);
+    }
 
-                    try {
-                              const billingProfile = await getBillingProfile(profile.id)
+    return profile;
+  };
 
-                              if (billingProfile?.plan === "pro" || billingProfile?.plan === "premium") {
-                                        if (profile.plan !== billingProfile.plan) {
-                                                  try {
-                                                            const syncedProfile = await syncSupabasePlan()
+  useEffect(() => {
+    let active = true;
 
-                                                            if (syncedProfile) {
-                                                                      return syncedProfile
-                                                            }
-                                                  } catch (syncError) {
-                                                            console.log("Billing sync error:", syncError)
-                                                  }
-                                        }
+    const hydrateUser = async (currentUser) => {
+      setUser(currentUser);
 
-                                        return {
-                                                  ...profile,
-                                                  plan: billingProfile.plan,
-                                        }
-                              }
-                    } catch (billingError) {
-                              console.log("Billing profile read error:", billingError)
-                    }
+      if (!currentUser) {
+        if (active) {
+          setUserData(null);
+          setLoading(false);
+        }
+        return;
+      }
 
-                    return profile
-          }
+      try {
+        const profile =
+          (await getUserProfile(currentUser.uid)) ||
+          (await ensureClientUserProfile(currentUser));
+        const mergedProfile = await mergeBillingPlan(profile);
 
-          useEffect(() => {
-                    const getUserAndData = async () => {
-                              setLoading(true)
+        if (active) {
+          setUserData(mergedProfile);
+        }
+      } catch (error) {
+        console.log("User profile load error:", error);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
 
-                              // 1. Get Auth User
-                              const { data: { user }, error } = await supabase.auth.getUser()
+    hydrateUser(auth.currentUser);
 
-                              if (error) {
-                                        console.log("Auth Error:", error)
-                                        setLoading(false)
-                                        return
-                              }
+    const unsubscribe = subscribeToAuthChanges(async (currentUser) => {
+      await hydrateUser(currentUser);
+    });
 
-                              setUser(user)
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
-                              if (!user) {
-                                        setLoading(false)
-                                        return
-                              }
+  return (
+    <UserContext.Provider value={{ user, userData, loading, setUserData }}>
+      {children}
+    </UserContext.Provider>
+  );
+};
 
-                              // 2. Get User Data from DB
-                              const { data, error: dbError } = await supabase
-                                        .from("users")
-                                        .select("*")
-                                        .eq("id", user.id)
-                                        .single()
-
-                              if (dbError) {
-                                        console.log("DB Error:", dbError)
-                              } else {
-                                        const mergedProfile = await mergeBillingPlan(data)
-                                        setUserData(mergedProfile)
-                              }
-
-                              setLoading(false)
-                    }
-
-                    getUserAndData()
-
-                    // 🔥 Realtime Auth Listener
-                    const { data: listener } = supabase.auth.onAuthStateChange(
-                              async (event, session) => {
-                                        const currentUser = session?.user || null
-                                        setUser(currentUser)
-
-                                        if (currentUser) {
-                                                  const { data } = await supabase
-                                                            .from("users")
-                                                            .select("*")
-                                                            .eq("id", currentUser.id)
-                                                            .single()
-
-                                                  const mergedProfile = await mergeBillingPlan(data)
-                                                  setUserData(mergedProfile)
-                                        } else {
-                                                  setUserData(null)
-                                        }
-                              }
-                    )
-
-                    return () => {
-                              listener.subscription.unsubscribe()
-                    }
-          }, [])
-
-          return (
-                    <UserContext.Provider value={{ user, userData, loading, setUserData }}>
-                              {children}
-                    </UserContext.Provider>
-          )
-}
-
-// Custom Hook
 export const useUser = () => {
-          return useContext(UserContext)
-}
+  return useContext(UserContext);
+};

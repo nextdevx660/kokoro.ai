@@ -1,15 +1,15 @@
 'use client'
 
-import { supabase } from '@/lib/supabase'
+import { auth } from '@/lib/firebase'
+import { ensureUserProfile } from '@/lib/user-storage'
+import { signInWithGoogle, signUpWithEmail } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { FcGoogle } from "react-icons/fc";
-import { IoClose } from "react-icons/io5"; // Close icon ke liye
+import { IoClose } from "react-icons/io5";
 
 export default function Page() {
   const router = useRouter()
-
-  // Modal aur Form States
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,88 +19,73 @@ export default function Page() {
   const buildAvatarUrl = (displayName) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`
 
-  const signupWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      },
-    })
+  function checkUserAndRedirect() {
+    const user = auth.currentUser
+    if (user) router.push('/home')
+  }
 
-    if (error) {
+  const signupWithGoogle = async () => {
+    try {
+      const result = await signInWithGoogle()
+      const currentUser = result.user
+      const displayName = currentUser.displayName || currentUser.email || 'Unknown User'
+
+      await ensureUserProfile(currentUser, {
+        name: displayName,
+        avatar_url: currentUser.photoURL || buildAvatarUrl(displayName),
+        isVerified: Boolean(currentUser.emailVerified),
+      })
+
+      router.push('/home')
+    } catch (error) {
       alert(error.message)
     }
   }
 
-
   useEffect(() => {
     const storeUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = auth.currentUser
       if (!user) return
 
-      const displayName = user.user_metadata?.name || user.email || 'Unknown User'
+      const displayName = user.displayName || user.email || 'Unknown User'
 
-      const { error } = await supabase.from('users').upsert({
-        id: user.id,
-        email: user.email,
+      await ensureUserProfile(user, {
         name: displayName,
-        avatar_url: buildAvatarUrl(displayName),
-        isBan: false,
-        isSuspend: false,
-        isVerified: true,
+        avatar_url: user.photoURL || buildAvatarUrl(displayName),
+        isVerified: Boolean(user.emailVerified),
       })
-
-      if (error) {
-        console.error('Failed to store user data:', error)
-      }
     }
+
     storeUserData()
     checkUserAndRedirect()
   }, [])
 
-  // Email Signup Function
   const handleEmailSignup = async (e) => {
     e.preventDefault()
     setLoading(true)
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name: name }
-      }
-    })
+    try {
+      const data = await signUpWithEmail({
+        email,
+        password,
+        name,
+      })
 
-    if (error) {
-      alert(error.message)
-    } else {
-      // User table me entry (agar trigger nahi set kiya hai to)
       if (data.user) {
-        const { error: profileError } = await supabase.from('users').upsert({
-          id: data.user.id,
-          email: data.user.email,
-          name: name,
+        await ensureUserProfile(data.user, {
+          name: name.trim(),
           avatar_url: buildAvatarUrl(name),
-          isBan: false,
-          isSuspend: false,
-          isVerified: false,
+          isVerified: Boolean(data.user.emailVerified),
         })
 
-        if (profileError) {
-          alert(profileError.message)
-          setLoading(false)
-          return
-        }
         router.push('/home')
         setIsModalOpen(false)
       }
+    } catch (error) {
+      alert(error.message)
     }
-    setLoading(false)
-  }
 
-  const checkUserAndRedirect = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) router.push('/home')
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -109,8 +94,6 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-white md:bg-slate-50 flex flex-col font-sans relative">
-
-      {/* --- Navbar --- */}
       <div className="sticky top-0 z-40 bg-white md:bg-slate-50">
         <nav className="flex items-center justify-between py-4 px-6 md:px-8 border-b border-gray-200">
           <h1 className="text-black font-semibold text-xl md:text-2xl tracking-tight">(kokoro.ai)</h1>
@@ -122,10 +105,8 @@ export default function Page() {
         </nav>
       </div>
 
-      {/* --- Hero Section --- */}
       <main className="flex-1 flex md:items-center md:justify-center md:p-6 lg:p-12">
         <div className="relative w-full h-full md:h-[600px] max-w-7xl flex items-center">
-
           <div className="hidden md:block absolute right-0 w-[80%] h-full rounded-[2.5rem] overflow-hidden shadow-xl bg-gray-900">
             <video autoPlay loop muted playsInline className="w-full h-full object-cover opacity-90">
               <source src="/wizard.mp4" type="video/mp4" />
@@ -150,7 +131,6 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* Continue with Email button opens modal */}
               <button
                 onClick={() => setIsModalOpen(true)}
                 className="flex items-center justify-center gap-3 w-full py-3.5 bg-white text-black border border-gray-300 rounded-[1rem] font-semibold hover:bg-gray-50 transition-colors"
@@ -163,16 +143,13 @@ export default function Page() {
         </div>
       </main>
 
-      {/* --- SIGNUP MODAL --- */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          {/* Backdrop Blur */}
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsModalOpen(false)} // Background click se close hoga
+            onClick={() => setIsModalOpen(false)}
           ></div>
 
-          {/* Modal Content */}
           <div className="relative bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 overflow-hidden animate-in fade-in zoom-in duration-200">
             <button
               onClick={() => setIsModalOpen(false)}
@@ -216,7 +193,7 @@ export default function Page() {
                 <input
                   type="password"
                   required
-                  placeholder="••••••••"
+                  placeholder="Password"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-[1rem] focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

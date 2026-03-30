@@ -4,6 +4,17 @@ import { Sparkles, AudioLines } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 
+const FLOATING_POSITIONS = [
+          { top: "8%", left: "6%" },
+          { top: "18%", left: "78%" },
+          { top: "32%", left: "14%" },
+          { top: "10%", left: "52%" },
+          { top: "52%", left: "78%" },
+          { top: "62%", left: "10%" },
+          { top: "72%", left: "58%" },
+          { top: "42%", left: "88%" },
+];
+
 const CharacterHero = () => {
           const [images, setImages] = useState([]);
           const router = useRouter()
@@ -46,8 +57,8 @@ const CharacterHero = () => {
                                                             style={{
                                                                       width: i % 2 === 0 ? '60px' : '40px',
                                                                       height: i % 2 === 0 ? '60px' : '40px',
-                                                                      top: `${Math.random() * 80}%`,
-                                                                      left: `${Math.random() * 90}%`,
+                                                                      top: FLOATING_POSITIONS[i % FLOATING_POSITIONS.length].top,
+                                                                      left: FLOATING_POSITIONS[i % FLOATING_POSITIONS.length].left,
                                                             }}
                                                   >
                                                             <img src={url} alt="scattered char" className="w-full h-full object-cover" />
@@ -69,10 +80,10 @@ const CharacterHero = () => {
                                         <div className="relative flex items-center justify-center mb-12 h-64 w-full">
                                                   {/* Side Cards */}
                                                   <div className="absolute left-[15%] w-32 h-44 bg-gray-300 rounded-2xl rotate-[-5deg] overflow-hidden opacity-80 shadow-md">
-                                                            <img src={images[0]} className="w-full h-full object-cover grayscale" />
+                                                            <img src={images[0]} alt="" className="w-full h-full object-cover grayscale" />
                                                   </div>
                                                   <div className="absolute right-[15%] w-32 h-44 bg-gray-300 rounded-2xl rotate-[5deg] overflow-hidden opacity-80 shadow-md">
-                                                            <img src={images[1]} className="w-full h-full object-cover grayscale" />
+                                                            <img src={images[1]} alt="" className="w-full h-full object-cover grayscale" />
                                                   </div>
 
                                                   {/* Main Focus Card */}

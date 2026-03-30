@@ -7,7 +7,7 @@ import { ChevronDown, Compass, CompassIcon, Globe2, Globe2Icon, Loader2, Loader2
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthProvider";
-import { supabase } from "@/lib/supabase";
+import { getFirebaseAccessToken } from "@/lib/auth-client";
 import { useUser } from "@/context/UserContext";
 
 const initialForm = {
@@ -91,11 +91,9 @@ export default function CreateScenePage() {
       setSubmitting(true);
       setError("");
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const accessToken = await getFirebaseAccessToken();
 
-      if (!session?.access_token) {
+      if (!accessToken) {
         throw new Error("Your session expired. Please sign in again.");
       }
 
@@ -112,7 +110,7 @@ export default function CreateScenePage() {
       const response = await fetch("/api/scenes", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: payload,
       });
@@ -148,7 +146,7 @@ export default function CreateScenePage() {
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-slate-500">
               Define the setting, tone, and narrative rules. Once initialized, the system
-              will drop you directly into the life you've designed.
+              will drop you directly into the life you&apos;ve designed.
             </p>
           </div>
 
