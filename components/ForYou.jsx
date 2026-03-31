@@ -1,14 +1,60 @@
+'use client';
+
 import Image from 'next/image';
 import React from 'react';
-import { MessageSquare } from 'lucide-react'; // Optional: Use lucide-react for the icon
+import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { getUserNameById } from '@/lib/user-storage';
 
 export default function ForYou({ forYou }) {
           const router = useRouter()
+          const [authorNames, setAuthorNames] = React.useState({})
 
           const handleClick = (id) => {
                     router.push('/chat/'+id)
           }
+
+          const getUserName = async (userId) => {
+                    if (!userId) {
+                              return 'System'
+                    }
+
+                    return getUserNameById(userId)
+          }
+
+          React.useEffect(() => {
+                    let isMounted = true
+
+                    async function loadAuthorNames() {
+                              const userIds = [...new Set(forYou.map((item) => item?.userId).filter(Boolean))]
+
+                              if (!userIds.length) {
+                                        setAuthorNames({})
+                                        return
+                              }
+
+                              try {
+                                        const resolvedNames = await Promise.all(
+                                                  userIds.map(async (userId) => [userId, await getUserName(userId)])
+                                        )
+
+                                        if (!isMounted) {
+                                                  return
+                                        }
+
+                                        setAuthorNames(Object.fromEntries(resolvedNames))
+                              } catch (error) {
+                                        console.error('Failed to load creator names:', error)
+                              }
+                    }
+
+                    loadAuthorNames()
+
+                    return () => {
+                              isMounted = false
+                    }
+          }, [forYou])
+
           return (
                     <div className="">
                               <h2 className="text-lg font-semibold text-black pb-2 px-2">For you</h2>
@@ -38,7 +84,7 @@ export default function ForYou({ forYou }) {
                                                                                           {item.name}
                                                                                 </h3>
                                                                                 <p className="text-xs text-gray-500 mt-0.5">
-                                                                                          By @{item.author || 'System'}
+                                                                                          By @{authorNames[item.userId] || item.author || 'System'}
                                                                                 </p>
                                                                                 <p className="text-sm text-gray-700 mt-2 line-clamp-2 leading-snug">
                                                                                           {item.description}
